@@ -1,13 +1,13 @@
 from TTS.api import TTS
 
-# 1. Choisir un modèle TTS disponible
-# La librairie va automatiquement télécharger le modèle si nécessaire
-tts = TTS(model_name="tts_models/en/ljspeech/tacotron2-DDC")
+# Instancie le TTS avec un modèle français
+tts = TTS(model_name="tts_models/fr/css10/vits")
 
-# 2. Le texte à transformer en audio
-texte = "Bonjour Infni, voici un test de synthèse vocale avec TTS."
+# Texte à convertir
+texte = "Bonjour Infni, voici un exemple de voix française très lente."
 
-# 3. Générer le fichier audio localement
-tts.tts_to_file(text=texte, file_path="sortie_audio.wav")
+# Génération audio
+# `speed` permet de ralentir ou accélérer la voix (1.0 = normal, <1 = plus lent, >1 = plus rapide)
+tts.tts_to_file(text=texte, file_path="sortie_fr.wav", speaker=None, speed=0.6)
 
-print("Audio généré : sortie_audio.wav")
+print("Audio généré avec succès : sortie_fr.wav")
