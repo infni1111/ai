@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0f1115"/>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#2a2f3a" stroke-width="6"/>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#ffcc00" stroke-width="4" stroke-dasharray="14 10" opacity="0.55"/>
+  <line x1="256" y1="60" x2="256" y2="452" stroke="#2a2f3a" stroke-width="3"/>
+  <line x1="60" y1="256" x2="452" y2="256" stroke="#2a2f3a" stroke-width="3"/>
+  <line x1="256" y1="256" x2="138" y2="132" stroke="#2ecc71" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="138" cy="132" r="26" fill="#2ecc71" stroke="#fff" stroke-width="4"/>
+  <line x1="256" y1="256" x2="386" y2="176" stroke="#ff5a5f" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="386" cy="176" r="26" fill="#ff5a5f" stroke="#fff" stroke-width="4"/>
+  <path d="M 176 188 A 92 92 0 0 1 310 172" fill="none" stroke="#ffcc00" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="256" cy="256" r="22" fill="#4aa3ff" stroke="#fff" stroke-width="5"/>
+  <text x="256" y="426" text-anchor="middle" font-family="system-ui,sans-serif"
+        font-size="54" font-weight="800" fill="#e7ebf3" letter-spacing="4">GPS</text>
+</svg>

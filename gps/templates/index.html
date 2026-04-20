@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GPS Pointer">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+<link rel="apple-touch-icon" href="/static/icon.svg">
+<title>GPS Antenna Pointer — MTN Yaoundé</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""/>
+<style>
+  :root { --bg:#0f1115; --panel:#1a1d24; --text:#e7ebf3; --muted:#8b93a7;
+          --green:#2ecc71; --red:#ff5a5f; --blue:#4aa3ff; --accent:#ffcc00;
+          --overlay:rgba(15,17,21,0.55); }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; height:100%; width:100%;
+               background:var(--bg); color:var(--text); overflow:hidden;
+               font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+
+  /* ---------- Fullscreen map ---------- */
+  #map { position:fixed; inset:0; z-index:0; background:#0a0c10; }
+  .leaflet-container { background:#0a0c10; }
+
+  /* ---------- Top angle pill ---------- */
+  #angle-pill {
+    position:fixed; top:env(safe-area-inset-top,8px); left:50%;
+    transform:translate(-50%, 0); z-index:600;
+    background:rgba(15,17,21,0.82); backdrop-filter: blur(8px);
+    border:1px solid #2a2f3a; border-radius:999px;
+    padding:8px 18px; min-width:170px; text-align:center;
+    box-shadow:0 4px 16px rgba(0,0,0,0.35);
+  }
+  #angle-pill .lbl { font-size:10px; color:var(--muted); text-transform:uppercase;
+                     letter-spacing:.09em; display:block; }
+  #angle-pill .big { font-size:28px; font-weight:700; line-height:1; letter-spacing:-1px;
+                     font-variant-numeric: tabular-nums; }
+  #angle-pill .big.cw   { color:var(--red); }
+  #angle-pill .big.ccw  { color:var(--blue); }
+  #angle-pill .big.zero { color:var(--green); }
+  #angle-pill .hint { font-size:11px; color:var(--muted); margin-top:2px; }
+
+  /* ---------- Floating buttons ---------- */
+  .fab {
+    position:fixed; z-index:600; width:48px; height:48px; border-radius:50%;
+    border:0; background:rgba(26,29,36,0.92); color:var(--text);
+    backdrop-filter: blur(8px); font-size:22px; cursor:pointer;
+    box-shadow:0 4px 14px rgba(0,0,0,0.4); display:flex;
+    align-items:center; justify-content:center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .fab:active { transform:scale(0.94); }
+  #fab-settings { bottom:calc(env(safe-area-inset-bottom,8px) + 12px); left:12px; }
+  #fab-details  { bottom:calc(env(safe-area-inset-bottom,8px) + 12px); right:12px; }
+
+  /* ---------- Bottom sheet ---------- */
+  #sheet {
+    position:fixed; left:0; right:0; bottom:0; z-index:650;
+    background:var(--panel); border-top:1px solid #2a2f3a;
+    border-top-left-radius:16px; border-top-right-radius:16px;
+    padding:14px 14px calc(env(safe-area-inset-bottom,0px) + 14px) 14px;
+    transform: translateY(100%); transition: transform .22s ease;
+    max-height:70vh; overflow:auto;
+    box-shadow: 0 -8px 24px rgba(0,0,0,0.45);
+  }
+  #sheet.open { transform: translateY(0); }
+  #sheet .handle { width:36px; height:4px; background:#3a3f4b; border-radius:2px;
+                   margin:0 auto 10px auto; }
+  #sheet h3 { margin:0 0 8px 0; font-size:13px; color:var(--muted);
+              text-transform:uppercase; letter-spacing:.08em; font-weight:600; }
+  .grid { display:grid; grid-template-columns:auto 1fr; gap:6px 12px; font-size:13px; }
+  .grid .k { color:var(--muted); }
+  .grid .v { font-variant-numeric: tabular-nums; text-align:right; }
+  .row2 { margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; }
+  .row2 button, .row2 a { padding:8px 12px; background:#2a2f3a; color:var(--text);
+                          border:0; border-radius:6px; font-size:13px;
+                          cursor:pointer; text-decoration:none; }
+  .row2 button.primary { background:var(--accent); color:#111; font-weight:600; }
+
+  /* ---------- Setup modal ---------- */
+  #setup {
+    position:fixed; inset:0; z-index:1000;
+    background:var(--overlay); backdrop-filter: blur(4px);
+    display:flex; align-items:center; justify-content:center; padding:16px;
+  }
+  #setup.hidden { display:none; }
+  #setup .card {
+    width:100%; max-width:420px; background:var(--panel);
+    border:1px solid #2a2f3a; border-radius:12px;
+    padding:16px; max-height:92vh; overflow:auto;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+  }
+  #setup h2 { margin:0 0 4px 0; font-size:18px; }
+  #setup .sub { font-size:12px; color:var(--muted); margin-bottom:14px; }
+  #setup fieldset { border:1px solid #2a2f3a; border-radius:8px;
+                    padding:10px 12px 12px 12px; margin:0 0 12px 0; }
+  #setup legend { font-size:11px; color:var(--muted); padding:0 6px;
+                  text-transform:uppercase; letter-spacing:.08em; }
+  #setup legend .dot { width:10px; height:10px; border-radius:50%;
+                       display:inline-block; vertical-align:middle; margin-right:6px; }
+  .ll-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .field label { display:block; font-size:11px; color:var(--muted);
+                 margin-bottom:3px; text-transform:uppercase; letter-spacing:.06em; }
+  .field input { width:100%; padding:8px 10px; background:#0f1115; color:var(--text);
+                 border:1px solid #2a2f3a; border-radius:6px; font-size:14px;
+                 font-variant-numeric: tabular-nums; }
+  .field.name { margin-top:8px; }
+  .field.name input { font-variant-numeric: normal; }
+  .pick-btn { margin-top:8px; padding:7px 10px; background:#2a2f3a; color:var(--text);
+              border:0; border-radius:6px; font-size:12px; cursor:pointer; }
+  #setup .actions { display:flex; gap:8px; justify-content:flex-end; margin-top:6px; }
+  #setup .actions button { padding:9px 14px; border:0; border-radius:6px;
+                           font-size:14px; cursor:pointer; }
+  #setup .actions .secondary { background:#2a2f3a; color:var(--text); }
+  #setup .actions .primary { background:var(--accent); color:#111; font-weight:600; }
+  #setup .err { color:var(--red); font-size:12px; margin-top:6px; min-height:1em; }
+
+  /* ---------- Pick-mode banner ---------- */
+  #pick-banner {
+    position:fixed; top:env(safe-area-inset-top,8px); left:50%;
+    transform:translate(-50%, 0); z-index:950;
+    background:var(--accent); color:#111; padding:8px 14px;
+    border-radius:999px; font-size:13px; font-weight:600;
+    box-shadow:0 4px 14px rgba(0,0,0,0.4);
+  }
+  #pick-banner.hidden { display:none; }
+
+  /* ---------- Leaflet tweaks ---------- */
+  .leaflet-tooltip.coord-tip { background:transparent; border:0; box-shadow:none;
+                               padding:0; white-space:normal; }
+  .leaflet-tooltip.coord-tip:before { display:none; }
+  .leaflet-control-scale-line { background:rgba(0,0,0,0.6); color:#fff; border-color:#fff; }
+  .leaflet-control-attribution { font-size:10px; background:rgba(0,0,0,0.4) !important;
+                                 color:#999 !important; }
+  .leaflet-control-attribution a { color:#bbb !important; }
+
+  .status { font-size:11px; color:var(--muted); margin-top:8px; }
+  .status.err { color:var(--red); }
+</style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="angle-pill" aria-live="polite">
+    <span class="lbl" id="pill-lbl">Rotate from Ref</span>
+    <div class="big zero" id="angle">—</div>
+    <div class="hint" id="hint">Waiting…</div>
+  </div>
+
+  <button class="fab" id="fab-settings" title="Setup">⚙</button>
+  <button class="fab" id="fab-details"  title="Details">ℹ</button>
+
+  <div id="pick-banner" class="hidden">Tap the map to place the point</div>
+
+  <!-- ===== Details bottom sheet ===== -->
+  <div id="sheet">
+    <div class="handle"></div>
+    <h3>Positions & Distances</h3>
+    <div class="grid">
+      <div class="k">Your position</div>         <div class="v" id="user-pos">—</div>
+      <div class="k" id="k-ref">Bearing to Ref</div>    <div class="v" id="bearing-b">—</div>
+      <div class="k">Bearing to BTS</div>        <div class="v" id="bearing-t">—</div>
+      <div class="k" id="k-ref2">Distance to Ref</div>   <div class="v" id="dist-b">—</div>
+      <div class="k">Distance to BTS</div>       <div class="v" id="dist-t">—</div>
+    </div>
+    <div class="row2">
+      <button id="toggle-tiles">Hide map background</button>
+      <button id="fit">Fit all</button>
+      <button id="reset-north">North up</button>
+      <button id="open-setup">Edit Ref / BTS</button>
+      <button id="reset-points">Reset points</button>
+      <button id="install-app" class="primary" style="display:none">Install app</button>
+    </div>
+    <div class="status" id="status">Waiting for location…</div>
+    <div class="status" id="ios-hint" style="display:none">
+      On iPhone: tap <b>Share</b> → <b>Add to Home Screen</b> to install.
+    </div>
+  </div>
+
+  <!-- ===== Setup modal ===== -->
+  <div id="setup" class="hidden">
+    <div class="card">
+      <h2>Setup</h2>
+      <div class="sub">Enter the two fixed points before we start. You can edit them later with ⚙.</div>
+
+      <fieldset>
+        <legend><span class="dot" style="background:var(--green)"></span>Reference point</legend>
+        <div class="ll-row">
+          <div class="field">
+            <label for="ref-lat">Latitude</label>
+            <input id="ref-lat" type="number" step="0.0000001" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="ref-lon">Longitude</label>
+            <input id="ref-lon" type="number" step="0.0000001" inputmode="decimal">
+          </div>
+        </div>
+        <div class="field name">
+          <label for="ref-name">Name (optional)</label>
+          <input id="ref-name" type="text" placeholder="e.g. Palais Etoudi">
+        </div>
+        <button class="pick-btn" data-pick="ref">Pick on map</button>
+      </fieldset>
+
+      <fieldset>
+        <legend><span class="dot" style="background:var(--red)"></span>BTS point</legend>
+        <div class="ll-row">
+          <div class="field">
+            <label for="bts-lat">Latitude</label>
+            <input id="bts-lat" type="number" step="0.0000001" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="bts-lon">Longitude</label>
+            <input id="bts-lon" type="number" step="0.0000001" inputmode="decimal">
+          </div>
+        </div>
+        <div class="field name">
+          <label for="bts-name">Name (optional)</label>
+          <input id="bts-name" type="text" placeholder="e.g. Stade Omnisport">
+        </div>
+        <button class="pick-btn" data-pick="bts">Pick on map</button>
+      </fieldset>
+
+      <div class="err" id="setup-err"></div>
+      <div class="actions">
+        <button class="secondary" id="use-defaults" type="button">Use defaults</button>
+        <button class="primary"   id="start-btn"    type="button">Start</button>
+      </div>
+    </div>
+  </div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+<script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
+<script>
+  // ----- Defaults (used only when user taps "Use defaults") -----
+  const DEFAULTS = {
+    ref: { lat: 3.9115189, lon: 11.5145381, name: "Palais Etoudi" },
+    bts: { lat: 3.8855294, lon: 11.5406743, name: "Stade Omnisport" }
+  };
+  const STORAGE_KEY = "gps-antenna-setup-v1";
+
+  // ----- Math helpers -----
+  const toRad = d => d * Math.PI / 180;
+  const toDeg = r => r * 180 / Math.PI;
+  function bearing(lat1, lon1, lat2, lon2) {
+    const φ1 = toRad(lat1), φ2 = toRad(lat2);
+    const Δλ = toRad(lon2 - lon1);
+    const y = Math.sin(Δλ) * Math.cos(φ2);
+    const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+    return (toDeg(Math.atan2(y, x)) + 360) % 360;
+  }
+  function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const φ1 = toRad(lat1), φ2 = toRad(lat2);
+    const Δφ = toRad(lat2 - lat1), Δλ = toRad(lon2 - lon1);
+    const a = Math.sin(Δφ/2)**2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2)**2;
+    return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+  function signedDiff(b1, b2) {
+    let d = b2 - b1;
+    while (d >  180) d -= 360;
+    while (d <= -180) d += 360;
+    return d;
+  }
+  function fmtDistance(km) {
+    if (!isFinite(km)) return "—";
+    return km < 1 ? (km * 1000).toFixed(0) + " m" : km.toFixed(2) + " km";
+  }
+
+  // ----- Map (created now, markers only after setup is filled) -----
+  // rotate: true + touchRotate: true → pinch-rotate with two fingers (like Google Maps)
+  const map = L.map('map', {
+    zoomControl: true,
+    rotate: true,
+    touchRotate: true,
+    rotateControl: { closeOnZeroBearing: true, position: 'topright' },
+    bearing: 0
+  }).setView([3.88, 11.52], 12);
+  const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '© OpenStreetMap'
+  }).addTo(map);
+  L.control.scale({ imperial: false, metric: true, position: 'bottomleft' }).addTo(map);
+
+  function colorIcon(color) {
+    return L.divIcon({
+      className: 'color-marker',
+      html: `<div style="background:${color};width:16px;height:16px;border-radius:50%;
+              border:2px solid #fff;box-shadow:0 0 0 1px #0008;"></div>`,
+      iconSize: [20,20], iconAnchor: [10,10]
+    });
+  }
+  function coordLabel(name, lat, lon, color) {
+    return `<div style="background:rgba(0,0,0,0.72);color:#fff;padding:2px 6px;
+             border-radius:3px;border-left:3px solid ${color};font-size:11px;
+             font-family:monospace;white-space:nowrap;">
+             <b style="font-family:system-ui;font-weight:600;">${name}</b>
+             <span style="opacity:.8;">&nbsp;${lat.toFixed(5)}, ${lon.toFixed(5)}</span></div>`;
+  }
+
+  let refCfg = null;  // {lat, lon, name}
+  let btsCfg = null;
+  let refMarker = null, btsMarker = null;
+  let userMarker = null, userAccCircle = null;
+  let lineRef = null, lineBts = null;
+  let user = null;
+
+  function ensureMarkers() {
+    if (refCfg) {
+      const ll = [refCfg.lat, refCfg.lon];
+      if (!refMarker) {
+        refMarker = L.marker(ll, { icon: colorIcon('#2ecc71') }).addTo(map)
+          .bindPopup("<b>" + (refCfg.name||"Reference") + "</b>")
+          .bindTooltip(coordLabel(refCfg.name||"Ref", refCfg.lat, refCfg.lon, '#2ecc71'),
+                       { permanent: true, direction: 'right', offset: [12,0], className: 'coord-tip' });
+      } else {
+        refMarker.setLatLng(ll);
+        refMarker.setTooltipContent(coordLabel(refCfg.name||"Ref", refCfg.lat, refCfg.lon, '#2ecc71'));
+      }
+    }
+    if (btsCfg) {
+      const ll = [btsCfg.lat, btsCfg.lon];
+      if (!btsMarker) {
+        btsMarker = L.marker(ll, { icon: colorIcon('#ff5a5f') }).addTo(map)
+          .bindPopup("<b>" + (btsCfg.name||"BTS") + "</b>")
+          .bindTooltip(coordLabel(btsCfg.name||"BTS", btsCfg.lat, btsCfg.lon, '#ff5a5f'),
+                       { permanent: true, direction: 'right', offset: [12,0], className: 'coord-tip' });
+      } else {
+        btsMarker.setLatLng(ll);
+        btsMarker.setTooltipContent(coordLabel(btsCfg.name||"BTS", btsCfg.lat, btsCfg.lon, '#ff5a5f'));
+      }
+    }
+  }
+
+  function setUser(lat, lon, acc) {
+    user = { lat, lon, acc: acc || 0 };
+    const ll = [lat, lon];
+    if (!userMarker) {
+      userMarker = L.marker(ll, { icon: colorIcon('#4aa3ff') }).addTo(map)
+        .bindPopup("<b>You</b>")
+        .bindTooltip(coordLabel("You", lat, lon, '#4aa3ff'),
+                     { permanent: true, direction: 'right', offset: [12,0], className: 'coord-tip' });
+    } else {
+      userMarker.setLatLng(ll);
+      userMarker.setTooltipContent(coordLabel("You", lat, lon, '#4aa3ff'));
+    }
+    if (acc && acc > 0) {
+      if (!userAccCircle) {
+        userAccCircle = L.circle(ll, { radius: acc, color:'#4aa3ff', weight:1, fillOpacity:0.08 }).addTo(map);
+      } else userAccCircle.setLatLng(ll).setRadius(acc);
+    }
+    redraw();
+  }
+
+  function redraw() {
+    if (!user || !refCfg || !btsCfg) return;
+    const u = [user.lat, user.lon];
+    const r = [refCfg.lat, refCfg.lon];
+    const t = [btsCfg.lat, btsCfg.lon];
+    if (lineRef) lineRef.remove();
+    if (lineBts) lineBts.remove();
+    lineRef = L.polyline([u, r], { color:'#2ecc71', weight:3, opacity:0.9 }).addTo(map);
+    lineBts = L.polyline([u, t], { color:'#ff5a5f', weight:3, opacity:0.9 }).addTo(map);
+
+    const bR = bearing(user.lat, user.lon, refCfg.lat, refCfg.lon);
+    const bT = bearing(user.lat, user.lon, btsCfg.lat, btsCfg.lon);
+    const diff = signedDiff(bR, bT);
+    const dR = haversineKm(user.lat, user.lon, refCfg.lat, refCfg.lon);
+    const dT = haversineKm(user.lat, user.lon, btsCfg.lat, btsCfg.lon);
+
+    document.getElementById('user-pos').textContent =
+      user.lat.toFixed(6) + ", " + user.lon.toFixed(6) + (user.acc ? "  (±" + Math.round(user.acc) + "m)" : "");
+    document.getElementById('bearing-b').textContent = bR.toFixed(1) + "°";
+    document.getElementById('bearing-t').textContent = bT.toFixed(1) + "°";
+    document.getElementById('dist-b').textContent = fmtDistance(dR);
+    document.getElementById('dist-t').textContent = fmtDistance(dT);
+    document.getElementById('k-ref').textContent  = "Bearing to " + (refCfg.name||"Ref");
+    document.getElementById('k-ref2').textContent = "Distance to " + (refCfg.name||"Ref");
+    document.getElementById('pill-lbl').textContent = "Rotate from " + (refCfg.name||"Ref");
+
+    const el = document.getElementById('angle');
+    const hint = document.getElementById('hint');
+    el.classList.remove('cw','ccw','zero');
+    const abs = Math.abs(diff);
+    if (abs < 0.5) {
+      el.textContent = "0°"; el.classList.add('zero');
+      hint.textContent = "Aim straight at " + (refCfg.name||"ref");
+    } else if (diff > 0) {
+      el.textContent = "+" + diff.toFixed(1) + "°"; el.classList.add('cw');
+      hint.textContent = "Rotate " + diff.toFixed(1) + "° clockwise (right)";
+    } else {
+      el.textContent = diff.toFixed(1) + "°"; el.classList.add('ccw');
+      hint.textContent = "Rotate " + Math.abs(diff).toFixed(1) + "° counter-clockwise (left)";
+    }
+  }
+
+  // ----- Geolocation -----
+  const statusEl = document.getElementById('status');
+  function setStatus(msg, isErr=false) {
+    statusEl.textContent = msg;
+    statusEl.classList.toggle('err', isErr);
+  }
+  function startGeo() {
+    if (!('geolocation' in navigator)) {
+      setStatus("Geolocation not supported. Use 'Pick on map' via ⚙.", true);
+      return;
+    }
+    setStatus("Requesting location…");
+    navigator.geolocation.watchPosition(
+      pos => {
+        setStatus("Live position (±" + Math.round(pos.coords.accuracy) + " m).");
+        setUser(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+      },
+      err => { setStatus("Geolocation failed: " + err.message, true); },
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+    );
+  }
+
+  // ----- Setup modal logic -----
+  const setupEl = document.getElementById('setup');
+  const refLatI = document.getElementById('ref-lat');
+  const refLonI = document.getElementById('ref-lon');
+  const refNameI = document.getElementById('ref-name');
+  const btsLatI = document.getElementById('bts-lat');
+  const btsLonI = document.getElementById('bts-lon');
+  const btsNameI = document.getElementById('bts-name');
+  const errEl = document.getElementById('setup-err');
+
+  function openSetup(prefill) {
+    errEl.textContent = "";
+    if (prefill) {
+      refLatI.value = prefill.ref.lat;  refLonI.value = prefill.ref.lon;
+      refNameI.value = prefill.ref.name || "";
+      btsLatI.value = prefill.bts.lat;  btsLonI.value = prefill.bts.lon;
+      btsNameI.value = prefill.bts.name || "";
+    }
+    setupEl.classList.remove('hidden');
+  }
+  function closeSetup() { setupEl.classList.add('hidden'); }
+
+  document.getElementById('use-defaults').addEventListener('click', () => {
+    refLatI.value = DEFAULTS.ref.lat; refLonI.value = DEFAULTS.ref.lon;
+    refNameI.value = DEFAULTS.ref.name;
+    btsLatI.value = DEFAULTS.bts.lat; btsLonI.value = DEFAULTS.bts.lon;
+    btsNameI.value = DEFAULTS.bts.name;
+    errEl.textContent = "";
+  });
+
+  document.getElementById('start-btn').addEventListener('click', () => {
+    const rL = parseFloat(refLatI.value), rO = parseFloat(refLonI.value);
+    const tL = parseFloat(btsLatI.value), tO = parseFloat(btsLonI.value);
+    const ok = (v, lo, hi) => isFinite(v) && v >= lo && v <= hi;
+    if (!ok(rL,-90,90) || !ok(rO,-180,180) || !ok(tL,-90,90) || !ok(tO,-180,180)) {
+      errEl.textContent = "Please enter valid latitude (-90..90) and longitude (-180..180) for both points.";
+      return;
+    }
+    refCfg = { lat: rL, lon: rO, name: refNameI.value.trim() || "Reference" };
+    btsCfg = { lat: tL, lon: tO, name: btsNameI.value.trim() || "BTS" };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ref: refCfg, bts: btsCfg }));
+    ensureMarkers();
+    map.fitBounds([[refCfg.lat, refCfg.lon], [btsCfg.lat, btsCfg.lon]], { padding: [60, 60] });
+    redraw();
+    closeSetup();
+    if (!user) startGeo();
+  });
+
+  // Pick-on-map from inside setup
+  const pickBanner = document.getElementById('pick-banner');
+  let pickTarget = null; // 'ref' | 'bts' | 'user'
+  document.querySelectorAll('.pick-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      pickTarget = btn.dataset.pick;
+      closeSetup();
+      pickBanner.textContent = "Tap the map to place " + (pickTarget === 'ref' ? "Reference" : "BTS");
+      pickBanner.classList.remove('hidden');
+    });
+  });
+  map.on('click', e => {
+    if (pickTarget === 'ref') {
+      refLatI.value = e.latlng.lat.toFixed(7);
+      refLonI.value = e.latlng.lng.toFixed(7);
+      pickTarget = null; pickBanner.classList.add('hidden'); openSetup();
+    } else if (pickTarget === 'bts') {
+      btsLatI.value = e.latlng.lat.toFixed(7);
+      btsLonI.value = e.latlng.lng.toFixed(7);
+      pickTarget = null; pickBanner.classList.add('hidden'); openSetup();
+    } else if (pickTarget === 'user') {
+      setUser(e.latlng.lat, e.latlng.lng, 0);
+      pickTarget = null; pickBanner.classList.add('hidden');
+      setStatus("Your position set manually (GPS stream still running).");
+    }
+  });
+
+  // ----- FABs & sheet -----
+  const sheet = document.getElementById('sheet');
+  document.getElementById('fab-details').addEventListener('click', () => {
+    sheet.classList.toggle('open');
+  });
+  document.getElementById('fab-settings').addEventListener('click', () => {
+    openSetup({ ref: refCfg || { lat:'', lon:'', name:'' },
+                bts: btsCfg || { lat:'', lon:'', name:'' } });
+  });
+  document.getElementById('open-setup').addEventListener('click', () => {
+    sheet.classList.remove('open');
+    openSetup({ ref: refCfg, bts: btsCfg });
+  });
+
+  document.getElementById('fit').addEventListener('click', () => {
+    const pts = [];
+    if (refCfg) pts.push([refCfg.lat, refCfg.lon]);
+    if (btsCfg) pts.push([btsCfg.lat, btsCfg.lon]);
+    if (user)   pts.push([user.lat, user.lon]);
+    if (pts.length) map.fitBounds(pts, { padding: [60, 60] });
+  });
+
+  document.getElementById('reset-north').addEventListener('click', () => {
+    if (map.setBearing) map.setBearing(0);
+  });
+
+  document.getElementById('reset-points').addEventListener('click', () => {
+    if (!confirm("Forget the current Reference and BTS points?")) return;
+    localStorage.removeItem(STORAGE_KEY);
+    refCfg = null; btsCfg = null;
+    if (refMarker) { map.removeLayer(refMarker); refMarker = null; }
+    if (btsMarker) { map.removeLayer(btsMarker); btsMarker = null; }
+    if (lineRef) { lineRef.remove(); lineRef = null; }
+    if (lineBts) { lineBts.remove(); lineBts = null; }
+    // Clear setup form fields
+    refLatI.value = ""; refLonI.value = ""; refNameI.value = "";
+    btsLatI.value = ""; btsLonI.value = ""; btsNameI.value = "";
+    document.getElementById('angle').textContent = "—";
+    document.getElementById('hint').textContent = "Enter new points…";
+    sheet.classList.remove('open');
+    setupEl.classList.remove('hidden');
+  });
+
+  let tilesOn = true;
+  const tilesBtn = document.getElementById('toggle-tiles');
+  tilesBtn.addEventListener('click', () => {
+    if (tilesOn) { map.removeLayer(tileLayer); tilesBtn.textContent = "Show map background"; }
+    else         { tileLayer.addTo(map);       tilesBtn.textContent = "Hide map background"; }
+    tilesOn = !tilesOn;
+  });
+
+  // Fix map sizing on iOS Safari after keyboard / rotation
+  window.addEventListener('resize', () => map.invalidateSize());
+
+  // ----- PWA install handling -----
+  let deferredInstall = null;
+  const installBtn = document.getElementById('install-app');
+  const iosHint = document.getElementById('ios-hint');
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                    || window.navigator.standalone === true;
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredInstall = e;
+    if (!isStandalone) installBtn.style.display = '';
+  });
+  installBtn.addEventListener('click', async () => {
+    if (!deferredInstall) return;
+    deferredInstall.prompt();
+    const { outcome } = await deferredInstall.userChoice;
+    if (outcome === 'accepted') installBtn.style.display = 'none';
+    deferredInstall = null;
+  });
+  window.addEventListener('appinstalled', () => {
+    installBtn.style.display = 'none';
+    deferredInstall = null;
+  });
+  if (isIOS && !isStandalone) iosHint.style.display = '';
+
+  // ----- Service worker registration -----
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(err =>
+        console.warn('SW registration failed:', err));
+    });
+  }
+
+  // ----- Boot -----
+  (function boot() {
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"); } catch (_) {}
+    if (saved && saved.ref && saved.bts) {
+      refCfg = saved.ref; btsCfg = saved.bts;
+      ensureMarkers();
+      map.fitBounds([[refCfg.lat, refCfg.lon], [btsCfg.lat, btsCfg.lon]], { padding: [60, 60] });
+      startGeo();
+    } else {
+      openSetup();
+    }
+  })();
+</script>
+</body>
+</html>
